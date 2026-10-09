@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0a0f1d">
+    <title>Event Registration & Biometric Entry System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css?v=20261010-2">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">EventSecure</span>
+          <span class="brand-subtitle">Biometric Identity & Entry Control</span>
+        </div>
+      </div>
+      
+      <nav class="nav-tabs" role="tablist">
+        <button class="nav-tab active" data-tab="tab-registration" role="tab" aria-selected="true">
+          <span class="nav-icon">👤</span> Event Registration
+        </button>
+        <button class="nav-tab" data-tab="tab-checkin" role="tab" aria-selected="false">
+          <span class="nav-icon">🚪</span> Event Entry Check-In
+        </button>
+        <button class="nav-tab" data-tab="tab-database" role="tab" aria-selected="false">
+          <span class="nav-icon">🗄️</span> System Database Explorer
+        </button>
+      </nav>
+
+      <div class="topbar-actions">
+        <label class="theme-control" for="theme-select">Theme
+          <select id="theme-select" aria-label="Color theme">
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </label>
+        <span class="status-pill" id="api-status">
+          <span class="status-dot"></span> System Online
+        </span>
+      </div>
+    </header>
+
+    <main class="page-shell">
+      <!-- TAB 1: EVENT REGISTRATION FLOW -->
+      <section class="tab-content active" id="tab-registration">
+        <div class="flow-banner">
+          <div class="flow-header">
+            <span class="badge-accent">End-to-End Verification Pipeline</span>
+            <h2>Participant Registration & QR Issuance</h2>
+            <p>Participant submits contact details, verifies a mobile SMS code, completes the demo face and liveness checks with consent, and receives a QR pass.</p>
+          </div>
+          <div class="pipeline-stepper" id="pipeline-stepper">
+            <div class="step-node active" id="step-node-1">
+              <span class="step-num">1</span>
+              <div class="step-info">
+                <strong>Participant Details</strong>
+                <small>Event, Contact & Type</small>
+              </div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step-node" id="step-node-2">
+              <span class="step-num">2</span>
+              <div class="step-info">
+                <strong>Mobile SMS OTP</strong>
+                <small>Phone verification</small>
+              </div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step-node" id="step-node-3">
+              <span class="step-num">3</span>
+              <div class="step-info">
+                <strong>Face Biometrics</strong>
+                <small>Facial match check</small>
+              </div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step-node" id="step-node-4">
+              <span class="step-num">4</span>
+              <div class="step-info">
+                <strong>Liveness + PAD</strong>
+                <small>Anti-spoofing & Consent</small>
+              </div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step-node" id="step-node-5">
+              <span class="step-num">5</span>
+              <div class="step-info">
+                <strong>QR Pass Issued</strong>
+                <small>Ready for Gate Entry</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="registration-grid">
+          <!-- FORM PANEL (STEP 1) -->
+          <article class="panel card-panel" id="panel-step-1">
+            <div class="panel-header">
+              <div>
+                <span class="stage-tag">Step 1</span>
+                <h3>Participant Registration</h3>
+              </div>
+              <span class="status-tag" id="tag-step-1">Ready</span>
+            </div>
+
+            <form id="registration-form">
+              <div class="form-group full-width">
+                <label for="event-select">Select Event</label>
+                <select id="event-select" name="event_id" required>
+                  <option value="EVT-2026-001">EVT-2026-001 - Global AI & Cyber Security Summit 2026</option>
+                  <option value="EVT-2026-002">EVT-2026-002 - National Tech Innovators Conference</option>
+                  <option value="EVT-2026-003">EVT-2026-003 - Developer Hackathon 2026</option>
+                </select>
+                <small class="field-hint" id="event-capacity-hint">Capacity checking active</small>
+              </div>
+
+              <div class="field-grid">
+                <div class="form-group">
+                  <label for="full_name">Full Name</label>
+                  <input id="full_name" name="full_name" value="Ada Lovelace" placeholder="First and last name" required>
+                </div>
+                <div class="form-group">
+                  <label for="email">Email Address</label>
+                  <input id="email" name="email" type="email" value="ada.lovelace@computing.org" placeholder="ada@example.com" required>
+                </div>
+                <div class="form-group">
+                  <label for="mobile">Mobile Number</label>
+                  <input id="mobile" name="mobile" type="tel" inputmode="tel" autocomplete="tel" placeholder="+14155552671" pattern="\+[1-9][0-9]{7,14}" title="Use international format, for example +14155552671" required>
+                  <small class="field-hint">Use international format with country code, for example +14155552671.</small>
+                </div>
+                <div class="form-group">
+                  <label for="participant_type">Participant Type</label>
+                  <select id="participant_type" name="participant_type">
+                    <option value="Attendee">Attendee</option>
+                    <option value="Speaker">Speaker</option>
+                    <option value="VIP" selected>VIP</option>
+                    <option value="Organizer">Organizer</option>
+                    <option value="Delegate">Delegate</option>
+                  </select>
+                </div>
+                <div class="form-group full-width">
+                  <label for="organization">Organization / Company</label>
+                  <input id="organization" name="organization" value="Analytical Engine Lab" placeholder="Organization name" required>
+                </div>
+              </div>
+
+              <div class="consent-box">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="consent-check" checked required>
+                  <span>I consent to biometric face matching and ISO/IEC 30107 PAD liveness verification for identity confirmation at event entry.</span>
+                </label>
+              </div>
+
+              <button class="btn btn-primary" type="submit" id="btn-submit-reg">
+                <span>Initiate Registration & Request OTP</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </button>
+            </form>
+          </article>
+
+          <!-- VERIFICATION PIPELINE PANEL (STEPS 2, 3, 4) -->
+          <article class="panel card-panel" id="panel-verification">
+            <div class="panel-header">
+              <div>
+                <span class="stage-tag">Steps 2 – 4</span>
+                <h3>Identity & Biometric Checks</h3>
+              </div>
+              <span class="status-tag status-waiting" id="verification-status-tag">Awaiting Registration</span>
+            </div>
+
+            <!-- STEP 2: OTP -->
+            <div class="verification-card" id="card-otp">
+              <div class="vcard-header">
+                <span class="vcard-badge">Step 2</span>
+                <div>
+                  <strong>Mobile SMS OTP Verification</strong>
+                  <p>Enter the one-time code sent to the participant's mobile number.</p>
+                </div>
+              </div>
+              <div class="vcard-body">
+                <div class="otp-input-row">
+                  <input type="text" id="otp-input" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" placeholder="Enter 6-digit OTP" maxlength="6" disabled>
+                  <button class="btn btn-secondary" id="btn-verify-otp" disabled>Verify OTP</button>
+                </div>
+                <small class="field-hint" id="otp-sent-status" aria-live="polite">Request a code after submitting registration.</small>
+                <div class="otp-demo-pill" id="otp-demo-pill" style="display: none;">
+                  <span>Demo OTP: <strong id="demo-otp-val">123456</strong></span>
+                  <button type="button" class="btn-text" id="btn-fill-otp">Auto-Fill</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- STEP 3: FACE VERIFICATION -->
+            <div class="verification-card" id="card-face">
+              <div class="vcard-header">
+                <span class="vcard-badge">Step 3</span>
+                <div>
+                  <strong>Facial Biometric Matching</strong>
+                  <p>Compare the captured face against enrolled participants and block duplicate identities.</p>
+                </div>
+              </div>
+              <div class="vcard-body">
+                <div class="camera-preview-box" id="reg-camera-box">
+                  <video id="reg-camera-video" autoplay playsinline muted hidden></video>
+                  <div class="viewfinder-overlay">
+                    <div class="face-target-oval"></div>
+                    <span class="viewfinder-status" id="reg-camera-status">Camera ready for biometric enrollment</span>
+                  </div>
+                </div>
+                <div class="action-buttons-row">
+                  <button class="btn btn-secondary" type="button" id="btn-start-reg-camera" disabled>Enable Camera</button>
+                  <button class="btn btn-secondary" id="btn-verify-face" disabled>
+                    <span>Capture & Verify Face</span>
+                  </button>
+                </div>
+                <div class="check-result-tag" id="face-result-tag" style="display: none;"></div>
+              </div>
+            </div>
+
+            <!-- STEP 4: LIVENESS & PAD CHECK -->
+            <div class="verification-card" id="card-pad">
+              <div class="vcard-header">
+                <span class="vcard-badge">Step 4</span>
+                <div>
+                  <strong>Liveness & Presentation Attack Detection (PAD)</strong>
+                  <p>ISO/IEC 30107 compliant anti-spoofing check detecting printed photos, screen replays, and masks.</p>
+                </div>
+              </div>
+              <div class="vcard-body">
+                <div class="pad-checklist">
+                  <div class="pad-item" id="pad-item-liveness">
+                    <span class="pad-icon">👁️</span>
+                    <div>
+                      <strong>3D Micro-Motion Liveness</strong>
+                      <small id="liveness-desc">Verifies physical live subject presence</small>
+                    </div>
+                    <span class="badge-mini" id="badge-liveness">Pending</span>
+                  </div>
+                  <div class="pad-item" id="pad-item-spoof">
+                    <span class="pad-icon">🛡️</span>
+                    <div>
+                      <strong>Anti-Spoofing (PAD Filter)</strong>
+                      <small id="pad-desc">Guards against screen replay & paper attacks</small>
+                    </div>
+                    <span class="badge-mini" id="badge-pad">Pending</span>
+                  </div>
+                </div>
+
+                <div class="action-buttons-row" style="margin-top: 1rem;">
+                  <button class="btn btn-secondary" id="btn-verify-liveness" disabled>Run Liveness Check</button>
+                  <button class="btn btn-secondary" id="btn-verify-pad" disabled>Run PAD Check</button>
+                </div>
+
+                <button class="btn btn-primary" id="btn-complete-reg" disabled style="margin-top: 1rem;">
+                  <span>Finalize Registration & Issue QR Pass</span>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+                </button>
+              </div>
+            </div>
+          </article>
+
+          <!-- QR PASS BADGE PANEL (STEP 5) -->
+          <article class="panel card-panel full-col" id="panel-qr-pass">
+            <div class="panel-header">
+              <div>
+                <span class="stage-tag">Step 5</span>
+                <h3>Official Participant Access Pass</h3>
+              </div>
+              <span class="status-tag status-idle" id="pass-status-tag">Not Generated</span>
+            </div>
+
+            <div class="pass-container">
+              <div class="badge-card" id="badge-card">
+                <div class="badge-card-header">
+                  <span class="badge-event-title" id="pass-event-title">EVENT PASS</span>
+                  <span class="badge-type-pill" id="pass-type-pill">ATTENDEE</span>
+                </div>
+                
+                <div class="badge-card-body">
+                  <div class="badge-qr-area">
+                    <div class="qr-placeholder" id="qr-placeholder">
+                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                      <span>QR Pass will generate upon completing verification</span>
+                    </div>
+                    <img id="qr-image" alt="Official Entry QR Code" hidden>
+                  </div>
+
+                  <div class="badge-details">
+                    <h2 class="badge-attendee-name" id="pass-name">—</h2>
+                    <p class="badge-org-name" id="pass-org">—</p>
+
+                    <div class="badge-data-grid">
+                      <div>
+                        <span class="label">Participant ID</span>
+                        <code class="val" id="pass-part-id">—</code>
+                      </div>
+                      <div>
+                        <span class="label">Registration ID</span>
+                        <code class="val" id="pass-reg-id">—</code>
+                      </div>
+                      <div>
+                        <span class="label">Status</span>
+                        <strong class="val status-text" id="pass-status">—</strong>
+                      </div>
+                      <div>
+                        <span class="label">Consent ID</span>
+                        <code class="val" id="pass-consent-id">—</code>
+                      </div>
+                    </div>
+
+                    <div class="badge-token-box" id="pass-token-box" style="display: none;">
+                      <span class="label">Secure QR Token</span>
+                      <div class="token-display">
+                        <input type="text" id="pass-token-val" readonly>
+                        <button class="btn btn-secondary btn-sm" id="btn-copy-token">Copy Token</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="badge-card-footer">
+                  <span>🔒 Cryptographically signed by EventSecure Identity Engine</span>
+                  <button class="btn btn-secondary btn-sm" id="btn-use-at-gate" style="display: none;">
+                    Use at Entry Gate →
+                  </button>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- TAB 2: EVENT ENTRY CHECK-IN -->
+      <section class="tab-content" id="tab-checkin">
+        <div class="flow-banner">
+          <div class="flow-header">
+            <span class="badge-accent">Gate Entry Security Point</span>
+            <h2>Live Event Entry Check-In</h2>
+            <p>At the event entrance, the operator scans the attendee's QR Pass and compares the live face against the identity enrolled for that pass.</p>
+          </div>
+        </div>
+
+        <div class="checkin-grid">
+          <!-- GATE SCANNER PANEL -->
+          <article class="panel card-panel">
+            <div class="panel-header">
+              <div>
+                <span class="stage-tag">Entry Station</span>
+                <h3>Scan QR & Face Match</h3>
+              </div>
+              <span class="status-pill"><span class="status-dot"></span> Gate Active</span>
+            </div>
+
+            <form id="checkin-form">
+              <div class="form-group">
+                <label for="gate-qr-input">Scan QR Pass Token or Participant ID</label>
+                <div class="input-with-button">
+                  <input id="gate-qr-input" placeholder="Paste or scan QR token / Participant ID" required>
+                  <button type="button" class="btn btn-secondary" id="btn-paste-latest">Paste Latest</button>
+                </div>
+                <small class="field-hint">Supports cryptographically signed QR tokens or PART-XXXX identifiers.</small>
+              </div>
+
+              <div class="form-group" style="margin-top: 1rem;">
+                <label>Gate Camera Face Verification</label>
+                <div class="camera-preview-box gate-camera" id="gate-camera-box">
+                  <video id="gate-camera-video" autoplay playsinline muted hidden></video>
+                  <div class="viewfinder-overlay">
+                    <div class="face-target-oval"></div>
+                    <span class="viewfinder-status" id="gate-camera-status">Attendee standing at entry portal</span>
+                  </div>
+                </div>
+                <button class="btn btn-secondary" type="button" id="btn-start-gate-camera" style="margin-top: 0.65rem;">Enable Gate Camera</button>
+              </div>
+
+              <button class="btn btn-primary" type="submit" id="btn-gate-checkin">
+                <span>Authorize & Check-In Attendee</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </button>
+            </form>
+          </article>
+
+          <!-- GATE VERIFICATION RESULT PANEL -->
+          <article class="panel card-panel">
+            <div class="panel-header">
+              <div>
+                <span class="stage-tag">Gate Outcome</span>
+                <h3>Admission Decision</h3>
+              </div>
+            </div>
+
+            <div class="admission-display" id="admission-display">
+              <div class="admission-card idle" id="admission-card">
+                <div class="admission-icon" id="admission-icon">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                </div>
+                <h3 id="admission-title">Awaiting Attendee Scan</h3>
+                <p id="admission-desc">Scan attendee QR pass or enter participant ID to verify gate access.</p>
+                <div class="admission-meta" id="admission-meta" style="display: none;">
+                  <div><span>Attendee</span><strong id="adm-attendee">—</strong></div>
+                  <div><span>Type</span><strong id="adm-type">—</strong></div>
+                  <div><span>Organization</span><strong id="adm-org">—</strong></div>
+                  <div><span>Check-in Time</span><strong id="adm-time">—</strong></div>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- TAB 3: RELATIONAL DATABASE EXPLORER -->
+      <section class="tab-content" id="tab-database">
+        <div class="flow-banner">
+          <div class="flow-header">
+            <span class="badge-accent">Relational Schema Inspector</span>
+            <h2>System Database Tables</h2>
+            <p>Live synchronized view of all 4 normalized entities: <strong>Events</strong>, <strong>Participants</strong>, <strong>BiometricVerification</strong> (with Consent IDs), and <strong>Registrations</strong>.</p>
+          </div>
+          <div class="refresh-bar">
+            <button class="btn btn-secondary" id="btn-refresh-db">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+              <span>Refresh Tables</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="tables-stack">
+          <!-- EVENTS TABLE -->
+          <div class="table-card">
+            <div class="table-header">
+              <div>
+                <h3>Events</h3>
+                <small>EventId, EventName, EventDate, Capacity, Registered</small>
+              </div>
+              <span class="badge-mini" id="count-events">0 events</span>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table" id="table-events">
+                <thead>
+                  <tr>
+                    <th>Event ID</th>
+                    <th>Event Name</th>
+                    <th>Event Date</th>
+                    <th>Capacity</th>
+                    <th>Registered</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td colspan="5" class="empty-cell">Loading events…</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-pagination" data-pagination="events">
+              <button class="btn btn-secondary btn-sm" type="button" data-page-action="previous" disabled>Previous</button>
+              <span data-page-label>Page 1 of 1</span>
+              <button class="btn btn-secondary btn-sm" type="button" data-page-action="next" disabled>Next</button>
+            </div>
+          </div>
+
+          <!-- PARTICIPANTS TABLE -->
+          <div class="table-card">
+            <div class="table-header">
+              <div>
+                <h3>Participants</h3>
+                <small>ParticipantId, FullName, Email, Mobile, ParticipantType, Organization, CreatedAt</small>
+              </div>
+              <span class="badge-mini" id="count-participants">0 participants</span>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table" id="table-participants">
+                <thead>
+                  <tr>
+                    <th>Participant ID</th>
+                    <th>Full Name</th>
+                    <th>Email</th>
+                    <th>Mobile</th>
+                    <th>Type</th>
+                    <th>Organization</th>
+                    <th>Created At</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td colspan="7" class="empty-cell">Loading participants…</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-pagination" data-pagination="participants">
+              <button class="btn btn-secondary btn-sm" type="button" data-page-action="previous" disabled>Previous</button>
+              <span data-page-label>Page 1 of 1</span>
+              <button class="btn btn-secondary btn-sm" type="button" data-page-action="next" disabled>Next</button>
+            </div>
+          </div>
+
+          <!-- BIOMETRIC VERIFICATION AUDIT TABLE -->
+          <div class="table-card">
+            <div class="table-header">
+              <div>
+                <h3>BiometricVerification (Audit Log)</h3>
+                <small>VerificationId, ParticipantId, ProviderReference, FaceVerified, LivenessPassed, PAD, ConsentId, VerifiedAt</small>
+              </div>
+              <span class="badge-mini" id="count-biometrics">0 verifications</span>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table" id="table-biometrics">
+                <thead>
+                  <tr>
+                    <th>Verification ID</th>
+                    <th>Participant ID</th>
+                    <th>Provider Reference</th>
+                    <th>Face</th>
+                    <th>Liveness</th>
+                    <th>PAD</th>
+                    <th>Consent ID</th>
+                    <th>Verified At</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td colspan="8" class="empty-cell">No biometric verifications recorded yet.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-pagination" data-pagination="biometrics">
+              <button class="btn btn-secondary btn-sm" type="button" data-page-action="previous" disabled>Previous</button>
+              <span data-page-label>Page 1 of 1</span>
+              <button class="btn btn-secondary btn-sm" type="button" data-page-action="next" disabled>Next</button>
+            </div>
+          </div>
+
+          <!-- REGISTRATIONS TABLE -->
+          <div class="table-card">
+            <div class="table-header">
+              <div>
+                <h3>Registrations</h3>
+                <small>RegistrationId, ParticipantId, EventId, Status, RegisteredAt, CheckedInAt, QRToken</small>
+              </div>
+              <span class="badge-mini" id="count-registrations">0 registrations</span>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table" id="table-registrations">
+                <thead>
+                  <tr>
+                    <th>Reg ID</th>
+                    <th>Participant ID</th>
+                    <th>Event ID</th>
+                    <th>Status</th>
+                    <th>Registered At</th>
+                    <th>Checked-In At</th>
+                    <th>QR Token</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td colspan="7" class="empty-cell">No registrations yet.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-pagination" data-pagination="registrations">
+              <button class="btn btn-secondary btn-sm" type="button" data-page-action="previous" disabled>Previous</button>
+              <span data-page-label>Page 1 of 1</span>
+              <button class="btn btn-secondary btn-sm" type="button" data-page-action="next" disabled>Next</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="/static/app.js?v=20261010-3"></script>
+  </body>
+</html>
