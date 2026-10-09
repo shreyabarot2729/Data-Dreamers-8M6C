@@ -1,3 +1,4 @@
+# Data-Dreamers-8M6C
 # EventSecure: Biometric Event Registration & Check-In System
 
 A production-grade Python event registration and gate admission security platform built with **FastAPI**, **SQLAlchemy (Async)**, **Alembic**, and a responsive frontend interface.
