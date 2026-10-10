@@ -59,20 +59,7 @@ A production-grade Python event registration and gate admission security platfor
 | `organization` | Text | Company, institution, or organization |
 | `created_at` | DateTime (UTC) | Registration profile creation timestamp |
 
-### 3. `ParticipantAddress` (`participant_addresses`)
-| Column | Type | Description |
-|---|---|---|
-| `id` | Integer (PK) | Internal primary key |
-| `participant_id` | Text (Unique FK: `participants`) | Participant who owns the address |
-| `address_line1` | Text | Street address |
-| `address_line2` | Text (Nullable) | Apartment, suite, or unit |
-| `city` | Text | City or town |
-| `state_province` | Text | State, province, or region |
-| `country` | Text | Country or nation |
-| `postal_code` | Text | Postal or ZIP code |
-| `created_at` | DateTime (UTC) | Address record creation timestamp |
-
-### 4. `BiometricVerification` (`biometric_verifications`)
+### 3. `BiometricVerification` (`biometric_verifications`)
 | Column | Type | Description |
 |---|---|---|
 | `id` | Integer (PK) | Internal primary key |
@@ -87,7 +74,7 @@ A production-grade Python event registration and gate admission security platfor
 | `consent_id` | Text (Indexed) | Biometric data processing consent receipt (`CNS-XXXX`) |
 | `verified_at` | DateTime (UTC) | Verification audit timestamp (`verification_date`) |
 
-### 5. `Registrations`
+### 4. `Registrations`
 | Column | Type | Description |
 |---|---|---|
 | `id` | Integer (PK) | Internal primary key |
@@ -127,8 +114,6 @@ A production-grade Python event registration and gate admission security platfor
 
 ## Quick Start
 
-The registration UI presents one stage at a time: participant details and address, OTP, face verification, liveness, PAD, and QR pass. Participant postal details are stored separately in `participant_addresses`, linked one-to-one to the participant. Apply Alembic migrations with `alembic upgrade head` when upgrading an existing database.
-
 ### 1. Install Dependencies
 ```bash
 python -m pip install -e ".[dev]"
@@ -156,7 +141,9 @@ AWS_SECRET_ACCESS_KEY=<aws-secret-key>
 
 Use a managed PostgreSQL database; Vercel's function filesystem and the app's in-memory SQLite default are not durable across requests or deployments. Run `alembic upgrade head` against the configured production database before using the app. Create a Twilio Verify service with SMS enabled and use its Verify Service SID. Store credentials only in Vercel project environment settings, never in source control.
 
-For local real-SMS testing, copy `.env.example` to `.env`, then replace the Twilio placeholders with credentials from your Twilio account and Verify service. Restart Uvicorn after changing `.env`. Enter the recipient number in E.164 format (for example, `+14155552671`); Twilio trial accounts may only send to verified recipient numbers. Without these settings, development uses demo OTP and does not send SMS.
+For local setup, copy `.env.example` to `.env`. It uses demo OTP and AWS Rekognition for face matching. Configure AWS credentials either with `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in the ignored local `.env` file (add `AWS_SESSION_TOKEN` when using temporary credentials), or through the standard AWS credential chain such as an AWS CLI profile. Create the Rekognition collection in the configured region and grant the identity `rekognition:SearchFacesByImage` and `rekognition:IndexFaces` permissions. Restart Uvicorn after changing `.env`. Never commit or share AWS credentials.
+
+For local real-SMS testing, set `OTP_PROVIDER=twilio` and configure the Twilio account and Verify service credentials in `.env`. Enter the recipient number in E.164 format (for example, `+14155552671`); Twilio trial accounts may only send to verified recipient numbers. Without these settings, development uses demo OTP and does not send SMS.
 
 ### Same-Face Duplicate Prevention
 
@@ -168,40 +155,10 @@ aws rekognition create-collection --collection-id eventsecure-participants --reg
 
 Give the app's AWS identity `rekognition:SearchFacesByImage` and `rekognition:IndexFaces` permissions for that collection, then configure `AWS_REGION`, `AWS_REKOGNITION_COLLECTION`, `FACE_MATCH_THRESHOLD`, and AWS credentials through local environment settings or Vercel secrets. New camera enrollment searches existing faces before indexing; gate check-in must match the participant ID associated with the scanned pass. Existing registrations have no stored face template and must enroll again. Demo mode deliberately rejects camera images and never claims a biometric match. Liveness and PAD are still demo providers and need a real provider before production access control.
 
-Camera access is available only in secure browser contexts (HTTPS on Vercel or `localhost` during development). The current face, liveness, and presentation-attack providers are demos; live camera capture does not make those checks production biometric verification. Replace those providers with a qualified biometric/liveness service before using this system for real identity or access decisions.
-
-### Local Face Matching (No AWS Account)
-
-For local development, the app can use OpenCV Zoo's YuNet face detector and SFace recognition model. Matching runs on this computer; only a face embedding (not the captured camera photo) is stored in the local `participants.face_template` database column. Treat that template as sensitive biometric data: use only with informed consent, restrict access to the computer/database, and delete the local database when it is no longer needed. This local setup is not a production identity or access-control system. Liveness and PAD remain demos and can be spoofed.
-
-Install the optional dependency from the project root:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -e ".[local-face]"
-New-Item -ItemType Directory -Force models
-curl.exe -L "https://github.com/opencv/opencv_zoo/raw/refs/heads/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx" -o "models/face_detection_yunet_2023mar.onnx"
-curl.exe -L "https://github.com/opencv/opencv_zoo/raw/refs/heads/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx" -o "models/face_recognition_sface_2021dec.onnx"
-```
-
-These models are distributed by OpenCV Zoo under their respective licenses (YuNet: MIT; SFace: Apache 2.0). The model files are excluded from Git by `.gitignore`. Configure the local provider in `.env`:
-
-```ini
-FACE_PROVIDER=local
-LOCAL_FACE_MODEL_DIR=models
-LOCAL_FACE_MATCH_THRESHOLD=0.363
-```
-
-Apply the database migration and restart the app:
-
-```powershell
-.\.venv\Scripts\alembic.exe upgrade head
-.\.venv\Scripts\uvicorn.exe app.main:app --reload
-```
-
-Start a new registration to enroll a face. The app rejects images with no face or more than one face and blocks a face that matches a different enrolled participant. Local matching requires a single clear, front-facing face and good lighting. Model matching is probabilistic; the default cosine threshold is a starting point, not a calibrated security setting. Existing AWS-enrolled faces are not automatically transferred to local templates.
+Camera access is available only in secure browser contexts (HTTPS on Vercel or `localhost` during development). The default face provider is a demo; AWS Rekognition enables face matching when configured. Liveness and presentation-attack detection remain demo checks, so live camera capture does not make the complete flow production-ready for real identity or access decisions. Use qualified liveness and PAD providers before deploying for real access control.
 
 ### 2. Configure Environment
-Default runs on local SQLite out of the box (`.env`):
+Copy `.env.example` to `.env` and configure AWS credentials for real camera face matching. `.env` is ignored by Git. For demo mode without AWS, set `FACE_PROVIDER=demo`; demo mode intentionally rejects camera images and is not real biometric verification. SQLite is used locally:
 ```ini
 DATABASE_URL=sqlite+aiosqlite:///./event_registration.db
 DATABASE_ECHO=false
@@ -214,12 +171,15 @@ OTP_TTL_SECONDS=300
 ```bash
 alembic upgrade head
 ```
+For existing local SQLite databases, startup also adds the currently required event and biometric columns without deleting existing records. Continue to use Alembic for PostgreSQL and other deployed databases.
 
 ### 4. Run the API and Web UI
 ```bash
 uvicorn app.main:app --reload
 ```
 Open **`http://127.0.0.1:8000`** in your browser.
+
+The standalone, authenticated admin application is available at **`http://127.0.0.1:8000/admin/login`**. It uses the same backend and database as the participant site, while keeping its interface separate. Admin sign-in is served by `/api/admin/login`; subsequent admin operations use bearer-token authorization and server-side role checks. Admin management actions are recorded in the audit log where supported. Set a unique `ADMIN_PASSWORD` in your ignored local `.env` before the first startup; no shared default admin password is included in the repository. Admin account creation supports built-in roles; newly created accounts must use a password of at least 12 characters. Some requested functions (such as sending/re-sending notifications, editable provider secrets, MFA enrollment, and PDF/XLSX exports) are not exposed by the current backend and are not simulated by the panel. Enabling the MFA-required setting currently blocks login until an MFA provider is configured rather than accepting a static shared code.
 
 ### 5. Run the Automated Tests
 ```bash

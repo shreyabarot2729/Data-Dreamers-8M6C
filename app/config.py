@@ -17,15 +17,25 @@ class Settings(BaseSettings):
     face_provider: str = "demo"
     aws_region: str = "us-east-1"
     aws_rekognition_collection: str = "eventsecure-participants"
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
+    aws_session_token: str | None = None
     face_match_threshold: float = Field(default=90, ge=50, le=100)
-    local_face_model_dir: str = "models"
-    local_face_match_threshold: float = Field(default=0.363, ge=-1, le=1)
     app_url: str = "http://127.0.0.1:8000"
     verify_face: bool = True
     verify_liveness: bool = True
     verify_pad: bool = True
+    admin_username: str = "admin"
+    admin_email: str = "admin@eventsecure.local"
+    admin_password: str = ""
+    admin_role: str = "super_admin"
+    admin_mfa_required: bool = False
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = Settings()
