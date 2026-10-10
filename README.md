@@ -59,7 +59,20 @@ A production-grade Python event registration and gate admission security platfor
 | `organization` | Text | Company, institution, or organization |
 | `created_at` | DateTime (UTC) | Registration profile creation timestamp |
 
-### 3. `BiometricVerification` (`biometric_verifications`)
+### 3. `ParticipantAddress` (`participant_addresses`)
+| Column | Type | Description |
+|---|---|---|
+| `id` | Integer (PK) | Internal primary key |
+| `participant_id` | Text (Unique FK: `participants`) | Participant who owns the address |
+| `address_line1` | Text | Street address |
+| `address_line2` | Text (Nullable) | Apartment, suite, or unit |
+| `city` | Text | City or town |
+| `state_province` | Text | State, province, or region |
+| `country` | Text | Country or nation |
+| `postal_code` | Text | Postal or ZIP code |
+| `created_at` | DateTime (UTC) | Address record creation timestamp |
+
+### 4. `BiometricVerification` (`biometric_verifications`)
 | Column | Type | Description |
 |---|---|---|
 | `id` | Integer (PK) | Internal primary key |
@@ -74,7 +87,7 @@ A production-grade Python event registration and gate admission security platfor
 | `consent_id` | Text (Indexed) | Biometric data processing consent receipt (`CNS-XXXX`) |
 | `verified_at` | DateTime (UTC) | Verification audit timestamp (`verification_date`) |
 
-### 4. `Registrations`
+### 5. `Registrations`
 | Column | Type | Description |
 |---|---|---|
 | `id` | Integer (PK) | Internal primary key |
@@ -113,6 +126,8 @@ A production-grade Python event registration and gate admission security platfor
 ---
 
 ## Quick Start
+
+The registration UI presents one stage at a time: participant details and address, OTP, face verification, liveness, PAD, and QR pass. Participant postal details are stored separately in `participant_addresses`, linked one-to-one to the participant. Apply Alembic migrations with `alembic upgrade head` when upgrading an existing database.
 
 ### 1. Install Dependencies
 ```bash
@@ -154,6 +169,36 @@ aws rekognition create-collection --collection-id eventsecure-participants --reg
 Give the app's AWS identity `rekognition:SearchFacesByImage` and `rekognition:IndexFaces` permissions for that collection, then configure `AWS_REGION`, `AWS_REKOGNITION_COLLECTION`, `FACE_MATCH_THRESHOLD`, and AWS credentials through local environment settings or Vercel secrets. New camera enrollment searches existing faces before indexing; gate check-in must match the participant ID associated with the scanned pass. Existing registrations have no stored face template and must enroll again. Demo mode deliberately rejects camera images and never claims a biometric match. Liveness and PAD are still demo providers and need a real provider before production access control.
 
 Camera access is available only in secure browser contexts (HTTPS on Vercel or `localhost` during development). The current face, liveness, and presentation-attack providers are demos; live camera capture does not make those checks production biometric verification. Replace those providers with a qualified biometric/liveness service before using this system for real identity or access decisions.
+
+### Local Face Matching (No AWS Account)
+
+For local development, the app can use OpenCV Zoo's YuNet face detector and SFace recognition model. Matching runs on this computer; only a face embedding (not the captured camera photo) is stored in the local `participants.face_template` database column. Treat that template as sensitive biometric data: use only with informed consent, restrict access to the computer/database, and delete the local database when it is no longer needed. This local setup is not a production identity or access-control system. Liveness and PAD remain demos and can be spoofed.
+
+Install the optional dependency from the project root:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[local-face]"
+New-Item -ItemType Directory -Force models
+curl.exe -L "https://github.com/opencv/opencv_zoo/raw/refs/heads/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx" -o "models/face_detection_yunet_2023mar.onnx"
+curl.exe -L "https://github.com/opencv/opencv_zoo/raw/refs/heads/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx" -o "models/face_recognition_sface_2021dec.onnx"
+```
+
+These models are distributed by OpenCV Zoo under their respective licenses (YuNet: MIT; SFace: Apache 2.0). The model files are excluded from Git by `.gitignore`. Configure the local provider in `.env`:
+
+```ini
+FACE_PROVIDER=local
+LOCAL_FACE_MODEL_DIR=models
+LOCAL_FACE_MATCH_THRESHOLD=0.363
+```
+
+Apply the database migration and restart the app:
+
+```powershell
+.\.venv\Scripts\alembic.exe upgrade head
+.\.venv\Scripts\uvicorn.exe app.main:app --reload
+```
+
+Start a new registration to enroll a face. The app rejects images with no face or more than one face and blocks a face that matches a different enrolled participant. Local matching requires a single clear, front-facing face and good lighting. Model matching is probabilistic; the default cosine threshold is a starting point, not a calibrated security setting. Existing AWS-enrolled faces are not automatically transferred to local templates.
 
 ### 2. Configure Environment
 Default runs on local SQLite out of the box (`.env`):

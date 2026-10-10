@@ -37,6 +37,20 @@ class ParticipantResponse(BaseModel):
     created_at: datetime
 
 
+class ParticipantAddressResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    participant_id: str
+    address_line1: str
+    address_line2: str | None
+    city: str
+    state_province: str
+    country: str
+    postal_code: str
+    created_at: datetime
+
+
 class BiometricVerificationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -64,6 +78,12 @@ class CreateRegistrationRequest(BaseModel):
     mobile: str = Field(min_length=6, max_length=25)
     participant_type: str = Field(default="Attendee", max_length=50)
     organization: str = Field(default="Individual", max_length=150)
+    address_line1: str | None = Field(default=None, min_length=1, max_length=200)
+    address_line2: str | None = Field(default=None, max_length=200)
+    city: str | None = Field(default=None, min_length=1, max_length=100)
+    state_province: str | None = Field(default=None, min_length=1, max_length=100)
+    country: str | None = Field(default=None, min_length=1, max_length=100)
+    postal_code: str | None = Field(default=None, min_length=1, max_length=20)
     consent_agreed: bool = Field(default=True)
 
 

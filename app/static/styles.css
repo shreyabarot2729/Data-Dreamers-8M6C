@@ -354,8 +354,25 @@ code, pre {
 /* GRIDS */
 .registration-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 900px);
+  justify-content: center;
   gap: 1.75rem;
+}
+
+.registration-step-page {
+  display: none;
+}
+
+.registration-step-page.active {
+  display: block;
+}
+
+.registration-step-navigation {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
 }
 
 .full-col {

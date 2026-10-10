@@ -189,6 +189,11 @@ async def test_fastapi_endpoints_end_to_end():
             "mobile": "+15553334444",
             "participant_type": "VIP",
             "organization": "Viewpoints Research",
+            "address_line1": "1 Smalltalk Way",
+            "city": "Palo Alto",
+            "state_province": "California",
+            "country": "United States",
+            "postal_code": "94301",
         }
         create_res = await client.post("/api/registrations", json=reg_payload)
         assert create_res.status_code == 201
@@ -197,6 +202,11 @@ async def test_fastapi_endpoints_end_to_end():
         assert reg_data["otp_code"]
         reg_id = reg_data["id"]
         otp_code = reg_data["otp_code"]
+
+        addresses_res = await client.get("/api/participant-addresses")
+        assert addresses_res.status_code == 200
+        assert addresses_res.json()[0]["participant_id"] == reg_data["participant_id"]
+        assert addresses_res.json()[0]["postal_code"] == "94301"
 
         # Verify OTP
         otp_res = await client.post(f"/api/registrations/{reg_id}/otp", json={"code": otp_code})

@@ -3,10 +3,13 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import json
 import re
 import secrets
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
+from threading import Lock
 from typing import Any
 
 import httpx
@@ -20,6 +23,7 @@ class VerificationResult:
     message: str = ""
     provider_reference: str = ""
     confidence: float = 1.0
+    face_template: str | None = None
 
 
 class VerificationProvider(ABC):
@@ -207,6 +211,132 @@ class AwsRekognitionFaceProvider:
         return f"Face matching service error: {error}"
 
 
+class LocalFaceProvider:
+    def __init__(
+        self,
+        model_dir: str,
+        match_threshold: float,
+        detector: Any | None = None,
+        recognizer: Any | None = None,
+    ):
+        try:
+            import cv2
+            import numpy as np
+        except ImportError as exc:
+            raise ValueError(
+                "Install the local-face extra to use local face matching: "
+                "python -m pip install -e \".[local-face]\""
+            ) from exc
+
+        model_path = Path(model_dir)
+        detector_path = model_path / "face_detection_yunet_2023mar.onnx"
+        recognizer_path = model_path / "face_recognition_sface_2021dec.onnx"
+        missing_models = [
+            str(path) for path in (detector_path, recognizer_path) if not path.is_file()
+        ]
+        if missing_models:
+            raise ValueError(
+                "Local face model files are missing: "
+                f"{', '.join(missing_models)}. Follow the local setup steps in README.md."
+            )
+
+        self.cv2 = cv2
+        self.np = np
+        self.detector = detector or cv2.FaceDetectorYN.create(
+            str(detector_path), "", (320, 320), 0.9, 0.3, 5000
+        )
+        self.recognizer = recognizer or cv2.FaceRecognizerSF.create(str(recognizer_path), "")
+        self.match_threshold = match_threshold
+        self._inference_lock = Lock()
+
+    async def verify(self, subject: str, payload: str) -> VerificationResult:
+        embedding = await asyncio.to_thread(self._extract_embedding, payload)
+        return VerificationResult(
+            accepted=True,
+            message="Face captured and encoded locally",
+            provider_reference="LOCAL-SFACE",
+            face_template=json.dumps(embedding),
+        )
+
+    async def match_enrolled(
+        self, subject: str, payload: str, face_template: str | None
+    ) -> VerificationResult:
+        if not face_template:
+            return VerificationResult(
+                accepted=False,
+                message="No local face template is enrolled for this participant.",
+            )
+        observed = await asyncio.to_thread(self._extract_embedding, payload)
+        similarity = self._cosine_similarity(observed, self._parse_template(face_template))
+        return VerificationResult(
+            accepted=similarity >= self.match_threshold,
+            message=(
+                "Face matches the locally enrolled participant."
+                if similarity >= self.match_threshold
+                else "Face does not match the locally enrolled participant."
+            ),
+            provider_reference="LOCAL-SFACE",
+            confidence=similarity,
+        )
+
+    def _extract_embedding(self, payload: str) -> list[float]:
+        with self._inference_lock:
+            return self._extract_embedding_locked(payload)
+
+    def _extract_embedding_locked(self, payload: str) -> list[float]:
+        try:
+            header, encoded = payload.split(",", 1)
+            if not header.startswith("data:image/"):
+                raise ValueError
+            image_bytes = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise ValueError("A captured camera image is required for local face matching") from exc
+        if not image_bytes or len(image_bytes) > 5_000_000:
+            raise ValueError("Camera image must be between 1 byte and 5 MB")
+
+        image = self.cv2.imdecode(
+            self.np.frombuffer(image_bytes, dtype=self.np.uint8),
+            self.cv2.IMREAD_COLOR,
+        )
+        if image is None:
+            raise ValueError("The captured camera image could not be decoded.")
+
+        height, width = image.shape[:2]
+        self.detector.setInputSize((width, height))
+        _, faces = self.detector.detect(image)
+        if faces is None or len(faces) != 1:
+            raise ValueError("Show exactly one clear face in the camera, then try again.")
+
+        aligned = self.recognizer.alignCrop(image, faces[0])
+        features = self.recognizer.feature(aligned).flatten()
+        norm = float(self.np.linalg.norm(features))
+        if not norm:
+            raise ValueError(
+                "Could not create a usable face template. Try again with better lighting."
+            )
+        return (features / norm).astype(self.np.float32).tolist()
+
+    @staticmethod
+    def _parse_template(template: str) -> list[float]:
+        try:
+            values = json.loads(template)
+            if not isinstance(values, list) or not values:
+                raise ValueError
+            return [float(value) for value in values]
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ValueError("Stored local face template is invalid.") from exc
+
+    @staticmethod
+    def _cosine_similarity(first: list[float], second: list[float]) -> float:
+        if len(first) != len(second):
+            raise ValueError("Stored local face template has an incompatible model format.")
+        first_norm = sum(value * value for value in first) ** 0.5
+        second_norm = sum(value * value for value in second) ** 0.5
+        if not first_norm or not second_norm:
+            raise ValueError("Stored local face template is invalid.")
+        return sum(left * right for left, right in zip(first, second)) / (first_norm * second_norm)
+
+
 class DemoLivenessProvider(VerificationProvider):
     async def verify(self, subject: str, payload: str) -> VerificationResult:
         normalized = payload.strip().lower()
@@ -245,7 +375,7 @@ class VerificationProviderFactory:
     def __init__(
         self,
         otp: DemoOtpProvider | TwilioVerifyOtpProvider | None = None,
-        face: DemoFaceProvider | AwsRekognitionFaceProvider | None = None,
+        face: DemoFaceProvider | AwsRekognitionFaceProvider | LocalFaceProvider | None = None,
         liveness: DemoLivenessProvider | None = None,
         pad: DemoPadProvider | None = None,
     ):
@@ -276,12 +406,17 @@ class VerificationProviderFactory:
                 settings.aws_rekognition_collection,
                 settings.face_match_threshold,
             )
+        elif face_provider_name == "local":
+            self.face = LocalFaceProvider(
+                settings.local_face_model_dir,
+                settings.local_face_match_threshold,
+            )
         elif face_provider_name == "demo" and settings.app_env.lower() != "production":
             self.face = DemoFaceProvider()
         else:
             raise ValueError(
-                "Production requires FACE_PROVIDER=aws_rekognition; valid providers are "
-                "demo and aws_rekognition"
+                "Production requires a configured face provider; valid providers are "
+                "demo, aws_rekognition, and local"
             )
         self.liveness = liveness or DemoLivenessProvider()
         self.pad = pad or DemoPadProvider()
@@ -306,9 +441,13 @@ class VerificationProviderFactory:
     async def verify_face(self, subject: str, payload: str) -> VerificationResult:
         return await self.face.verify(subject, payload)
 
-    async def match_face(self, subject: str, payload: str) -> VerificationResult:
+    async def match_face(
+        self, subject: str, payload: str, face_template: str | None = None
+    ) -> VerificationResult:
         if isinstance(self.face, AwsRekognitionFaceProvider):
             return await self.face.match_enrolled(subject, payload)
+        if isinstance(self.face, LocalFaceProvider):
+            return await self.face.match_enrolled(subject, payload, face_template)
         return await self.face.verify(subject, payload)
 
     async def verify_liveness(self, subject: str, payload: str) -> VerificationResult:

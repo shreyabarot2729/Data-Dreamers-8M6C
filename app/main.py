@@ -19,6 +19,7 @@ from app.schemas import (
     CreateRegistrationRequest,
     EventResponse,
     OtpRequest,
+    ParticipantAddressResponse,
     ParticipantResponse,
     RegistrationResponse,
     VerificationRequest,
@@ -90,6 +91,11 @@ async def create_event(
 async def list_participants(service: RegistrationService = Depends(get_service)):
     participants = await service.get_participants()
     return participants
+
+
+@app.get("/api/participant-addresses", response_model=list[ParticipantAddressResponse])
+async def list_participant_addresses(service: RegistrationService = Depends(get_service)):
+    return await service.get_participant_addresses()
 
 
 @app.get("/api/registrations", response_model=list[RegistrationResponse])

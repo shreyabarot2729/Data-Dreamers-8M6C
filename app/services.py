@@ -10,8 +10,15 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.database import BiometricVerification, Event, Participant, Registration
+from app.database import (
+    BiometricVerification,
+    Event,
+    Participant,
+    ParticipantAddress,
+    Registration,
+)
 from app.providers import (
+    LocalFaceProvider,
     VerificationProviderFactory,
     generate_consent_id,
     generate_otp,
@@ -141,6 +148,13 @@ class RegistrationService:
         result = await session.execute(select(Participant).order_by(Participant.id.desc()))
         return list(result.scalars().all())
 
+    async def get_participant_addresses(self) -> list[ParticipantAddress]:
+        session = await self._get_session()
+        result = await session.execute(
+            select(ParticipantAddress).order_by(ParticipantAddress.id.desc())
+        )
+        return list(result.scalars().all())
+
     async def get_biometrics(
         self, participant_id: str | None = None
     ) -> list[BiometricVerification]:
@@ -226,6 +240,37 @@ class RegistrationService:
             session.add(participant)
             await session.flush()
 
+        address_fields = tuple(
+            value.strip() if value and value.strip() else None
+            for value in (
+                request.address_line1,
+                request.city,
+                request.state_province,
+                request.country,
+                request.postal_code,
+            )
+        )
+        if any(address_fields):
+            if not all(address_fields):
+                raise ValueError(
+                    "Complete the street address, city, state/province, country, and postal code."
+                )
+            address_result = await session.execute(
+                select(ParticipantAddress).where(
+                    ParticipantAddress.participant_id == participant.participant_id
+                )
+            )
+            address = address_result.scalar_one_or_none()
+            if address is None:
+                address = ParticipantAddress(participant_id=participant.participant_id)
+            address.address_line1 = address_fields[0]
+            address.address_line2 = (request.address_line2 or "").strip() or None
+            address.city = address_fields[1]
+            address.state_province = address_fields[2]
+            address.country = address_fields[3]
+            address.postal_code = address_fields[4]
+            session.add(address)
+
         # Step: Issue Email + Mobile OTP
         otp_code = None if self.providers.uses_external_otp else generate_otp()
         otp_secret = secrets.token_urlsafe(16)
@@ -293,6 +338,46 @@ class RegistrationService:
         result = await self.providers.verify_face(registration.participant_id, face_payload)
         if not result.accepted:
             raise ValueError(result.message or "Face verification failed")
+
+        if isinstance(self.providers.face, LocalFaceProvider):
+            if result.face_template is None:
+                raise ValueError("Local face matcher did not return a face template.")
+            session = await self._get_session()
+            participants = await session.execute(
+                select(Participant.participant_id, Participant.face_template).where(
+                    Participant.face_template.is_not(None),
+                    Participant.participant_id != registration.participant_id,
+                )
+            )
+            for participant_id, template in participants:
+                similarity = self.providers.face._cosine_similarity(
+                    self.providers.face._parse_template(result.face_template),
+                    self.providers.face._parse_template(template),
+                )
+                if similarity >= self.providers.face.match_threshold:
+                    raise ValueError(
+                        "This face is already enrolled under another participant. "
+                        "Registration blocked."
+                    )
+            participant_result = await session.execute(
+                select(Participant).where(
+                    Participant.participant_id == registration.participant_id
+                )
+            )
+            participant = participant_result.scalar_one_or_none()
+            if participant is None:
+                raise ValueError("Participant not found for local face enrollment.")
+            if participant.face_template:
+                similarity = self.providers.face._cosine_similarity(
+                    self.providers.face._parse_template(result.face_template),
+                    self.providers.face._parse_template(participant.face_template),
+                )
+                if similarity < self.providers.face.match_threshold:
+                    raise ValueError(
+                        "This registration does not match the participant's enrolled face."
+                    )
+            else:
+                participant.face_template = result.face_template
 
         registration.face_verified = True
         registration.face_match = result.provider_reference
@@ -415,7 +500,18 @@ class RegistrationService:
             status_str = registration.status
             raise ValueError(f"Registration is not confirmed (current status: {status_str})")
 
-        face_result = await self.providers.match_face(registration.participant_id, face_payload)
+        face_template = None
+        if isinstance(self.providers.face, LocalFaceProvider):
+            participant_result = await session.execute(
+                select(Participant.face_template).where(
+                    Participant.participant_id == registration.participant_id
+                )
+            )
+            participant = participant_result.scalar_one_or_none()
+            face_template = participant
+        face_result = await self.providers.match_face(
+            registration.participant_id, face_payload, face_template
+        )
         if not face_result.accepted:
             raise ValueError(face_result.message or "Face verification failed at entry gate")
 

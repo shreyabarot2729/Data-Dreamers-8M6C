@@ -6,7 +6,12 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.database import Base
-from app.providers import AwsRekognitionFaceProvider
+from app.providers import (
+    AwsRekognitionFaceProvider,
+    LocalFaceProvider,
+    VerificationProviderFactory,
+    VerificationResult,
+)
 from app.schemas import CreateRegistrationRequest
 from app.services import RegistrationService, VerificationStatus
 
@@ -77,6 +82,36 @@ async def test_expired_otp_is_rejected(test_db: RegistrationService):
 
 
 @pytest.mark.asyncio
+async def test_registration_saves_participant_address_in_separate_table(
+    test_db: RegistrationService,
+):
+    registration = await test_db.create_registration(
+        CreateRegistrationRequest(
+            event_id="evt-address",
+            full_name="Katherine Johnson",
+            email="katherine.address@example.com",
+            mobile="+15550000012",
+            address_line1="123 Main Street",
+            address_line2="Suite 4",
+            city="Hampton",
+            state_province="Virginia",
+            country="United States",
+            postal_code="23666",
+        )
+    )
+
+    addresses = await test_db.get_participant_addresses()
+    assert len(addresses) == 1
+    assert addresses[0].participant_id == registration.participant_id
+    assert addresses[0].address_line1 == "123 Main Street"
+    assert addresses[0].address_line2 == "Suite 4"
+    assert addresses[0].city == "Hampton"
+    assert addresses[0].state_province == "Virginia"
+    assert addresses[0].country == "United States"
+    assert addresses[0].postal_code == "23666"
+
+
+@pytest.mark.asyncio
 async def test_demo_provider_rejects_camera_images_instead_of_claiming_face_match(
     test_db: RegistrationService,
 ):
@@ -125,6 +160,68 @@ async def test_face_collection_blocks_duplicate_enrollment_and_requires_same_gat
     assert correct_gate_face.accepted is True
     assert correct_gate_face.confidence == pytest.approx(0.972)
     assert client.index_calls == 0
+
+
+def test_local_face_cosine_similarity():
+    assert LocalFaceProvider._cosine_similarity([1.0, 0.0], [1.0, 0.0]) == pytest.approx(1.0)
+    assert LocalFaceProvider._cosine_similarity([1.0, 0.0], [0.0, 1.0]) == pytest.approx(0.0)
+    with pytest.raises(ValueError, match="incompatible"):
+        LocalFaceProvider._cosine_similarity([1.0], [1.0, 0.0])
+
+
+@pytest.mark.asyncio
+async def test_local_face_provider_blocks_duplicate_enrollment(test_db: RegistrationService):
+    class FakeLocalFaceProvider(LocalFaceProvider):
+        def __init__(self):
+            self.match_threshold = 0.9
+
+        async def verify(self, subject: str, payload: str) -> VerificationResult:
+            return VerificationResult(
+                accepted=True,
+                face_template=payload,
+                provider_reference="LOCAL-SFACE",
+            )
+
+    provider = FakeLocalFaceProvider()
+    service = RegistrationService(
+        test_db.session_factory,
+        providers=VerificationProviderFactory(face=provider),
+    )
+
+    first = await service.create_registration(
+        CreateRegistrationRequest(
+            event_id="evt-local",
+            full_name="First Person",
+            email="first.local@example.com",
+            mobile="+15550000010",
+        )
+    )
+    await service.verify_otp(first.id, first.otp_code)
+    await service.verify_face(first.id, "[1.0, 0.0]")
+
+    same_participant = await service.create_registration(
+        CreateRegistrationRequest(
+            event_id="evt-local-repeat",
+            full_name="First Person",
+            email="first.local@example.com",
+            mobile="+15550000010",
+        )
+    )
+    await service.verify_otp(same_participant.id, same_participant.otp_code)
+    with pytest.raises(ValueError, match="does not match"):
+        await service.verify_face(same_participant.id, "[0.0, 1.0]")
+
+    second = await service.create_registration(
+        CreateRegistrationRequest(
+            event_id="evt-local",
+            full_name="Second Person",
+            email="second.local@example.com",
+            mobile="+15550000011",
+        )
+    )
+    await service.verify_otp(second.id, second.otp_code)
+    with pytest.raises(ValueError, match="already enrolled"):
+        await service.verify_face(second.id, "[0.99, 0.01]")
 
 
 @pytest.mark.asyncio

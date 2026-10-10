@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/styles.css?v=20261010-2">
+    <link rel="stylesheet" href="/static/styles.css?v=20261010-4">
   </head>
   <body>
     <header class="topbar">
@@ -54,14 +54,14 @@
           <div class="flow-header">
             <span class="badge-accent">End-to-End Verification Pipeline</span>
             <h2>Participant Registration & QR Issuance</h2>
-            <p>Participant submits contact details, verifies a mobile SMS code, completes the demo face and liveness checks with consent, and receives a QR pass.</p>
+            <p>Complete participant details and address, verify the mobile number, finish the configured face check and demo liveness/PAD steps, then receive a QR pass.</p>
           </div>
           <div class="pipeline-stepper" id="pipeline-stepper">
             <div class="step-node active" id="step-node-1">
               <span class="step-num">1</span>
               <div class="step-info">
                 <strong>Participant Details</strong>
-                <small>Event, Contact & Type</small>
+                <small>Contact, Type & Address</small>
               </div>
             </div>
             <div class="step-line"></div>
@@ -84,16 +84,24 @@
             <div class="step-node" id="step-node-4">
               <span class="step-num">4</span>
               <div class="step-info">
-                <strong>Liveness + PAD</strong>
-                <small>Anti-spoofing & Consent</small>
+                <strong>Liveness Check</strong>
+                <small>Live presence</small>
               </div>
             </div>
             <div class="step-line"></div>
             <div class="step-node" id="step-node-5">
               <span class="step-num">5</span>
               <div class="step-info">
-                <strong>QR Pass Issued</strong>
-                <small>Ready for Gate Entry</small>
+                <strong>PAD Check</strong>
+                <small>Presentation attack detection</small>
+              </div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step-node" id="step-node-6">
+              <span class="step-num">6</span>
+              <div class="step-info">
+                <strong>QR Pass</strong>
+                <small>Ready for gate entry</small>
               </div>
             </div>
           </div>
@@ -101,7 +109,7 @@
 
         <div class="registration-grid">
           <!-- FORM PANEL (STEP 1) -->
-          <article class="panel card-panel" id="panel-step-1">
+          <article class="panel card-panel registration-step-page active" id="panel-step-1" data-registration-step="1">
             <div class="panel-header">
               <div>
                 <span class="stage-tag">Step 1</span>
@@ -149,11 +157,35 @@
                   <label for="organization">Organization / Company</label>
                   <input id="organization" name="organization" value="Analytical Engine Lab" placeholder="Organization name" required>
                 </div>
+                <div class="form-group full-width">
+                  <label for="address_line1">Street Address</label>
+                  <input id="address_line1" name="address_line1" autocomplete="address-line1" placeholder="Street and house/building number" required>
+                </div>
+                <div class="form-group full-width">
+                  <label for="address_line2">Apartment, Suite, Unit (optional)</label>
+                  <input id="address_line2" name="address_line2" autocomplete="address-line2" placeholder="Apartment, suite, or unit">
+                </div>
+                <div class="form-group">
+                  <label for="city">City / Town</label>
+                  <input id="city" name="city" autocomplete="address-level2" required>
+                </div>
+                <div class="form-group">
+                  <label for="state_province">State / Province / Region</label>
+                  <input id="state_province" name="state_province" autocomplete="address-level1" required>
+                </div>
+                <div class="form-group">
+                  <label for="country">Country / Nation</label>
+                  <input id="country" name="country" autocomplete="country-name" required>
+                </div>
+                <div class="form-group">
+                  <label for="postal_code">Postal / ZIP Code</label>
+                  <input id="postal_code" name="postal_code" autocomplete="postal-code" required>
+                </div>
               </div>
 
               <div class="consent-box">
                 <label class="checkbox-label">
-                  <input type="checkbox" id="consent-check" checked required>
+                  <input type="checkbox" id="consent-check" name="consent_agreed" value="true" checked required>
                   <span>I consent to biometric face matching and ISO/IEC 30107 PAD liveness verification for identity confirmation at event entry.</span>
                 </label>
               </div>
@@ -165,12 +197,12 @@
             </form>
           </article>
 
-          <!-- VERIFICATION PIPELINE PANEL (STEPS 2, 3, 4) -->
-          <article class="panel card-panel" id="panel-verification">
+          <!-- STEP 2: OTP VERIFICATION -->
+          <article class="panel card-panel registration-step-page" id="panel-step-2" data-registration-step="2">
             <div class="panel-header">
               <div>
-                <span class="stage-tag">Steps 2 – 4</span>
-                <h3>Identity & Biometric Checks</h3>
+                <span class="stage-tag">Step 2</span>
+                <h3>Mobile OTP Verification</h3>
               </div>
               <span class="status-tag status-waiting" id="verification-status-tag">Awaiting Registration</span>
             </div>
@@ -197,7 +229,20 @@
               </div>
             </div>
 
-            <!-- STEP 3: FACE VERIFICATION -->
+            <div class="registration-step-navigation">
+              <button class="btn btn-secondary" type="button" data-registration-back="1">← Back to Details</button>
+            </div>
+          </article>
+
+          <!-- STEP 3: FACE VERIFICATION -->
+          <article class="panel card-panel registration-step-page" id="panel-step-3" data-registration-step="3">
+            <div class="panel-header">
+              <div>
+                <span class="stage-tag">Step 3</span>
+                <h3>Face Verification</h3>
+              </div>
+              <span class="status-tag status-waiting">OTP Verified</span>
+            </div>
             <div class="verification-card" id="card-face">
               <div class="vcard-header">
                 <span class="vcard-badge">Step 3</span>
@@ -223,14 +268,26 @@
                 <div class="check-result-tag" id="face-result-tag" style="display: none;"></div>
               </div>
             </div>
+            <div class="registration-step-navigation">
+              <button class="btn btn-secondary" type="button" data-registration-back="2">← Back to OTP</button>
+            </div>
+          </article>
 
-            <!-- STEP 4: LIVENESS & PAD CHECK -->
-            <div class="verification-card" id="card-pad">
+            <!-- STEP 4: LIVENESS CHECK -->
+          <article class="panel card-panel registration-step-page" id="panel-step-4" data-registration-step="4">
+            <div class="panel-header">
+              <div>
+                <span class="stage-tag">Step 4</span>
+                <h3>Liveness Check</h3>
+              </div>
+              <span class="status-tag status-waiting">Face Verified</span>
+            </div>
+            <div class="verification-card" id="card-liveness">
               <div class="vcard-header">
                 <span class="vcard-badge">Step 4</span>
                 <div>
-                  <strong>Liveness & Presentation Attack Detection (PAD)</strong>
-                  <p>ISO/IEC 30107 compliant anti-spoofing check detecting printed photos, screen replays, and masks.</p>
+                  <strong>Live Subject Presence</strong>
+                  <p>Run the configured liveness check before proceeding to the separate PAD step. Demo mode does not provide real liveness detection.</p>
                 </div>
               </div>
               <div class="vcard-body">
@@ -238,39 +295,65 @@
                   <div class="pad-item" id="pad-item-liveness">
                     <span class="pad-icon">👁️</span>
                     <div>
-                      <strong>3D Micro-Motion Liveness</strong>
+                      <strong>Liveness Verification</strong>
                       <small id="liveness-desc">Verifies physical live subject presence</small>
                     </div>
                     <span class="badge-mini" id="badge-liveness">Pending</span>
                   </div>
+                </div>
+                <button class="btn btn-primary" id="btn-verify-liveness" disabled style="margin-top: 1rem;">Run Liveness Check</button>
+              </div>
+            </div>
+            <div class="registration-step-navigation">
+              <button class="btn btn-secondary" type="button" data-registration-back="3">← Back to Face Check</button>
+            </div>
+          </article>
+
+          <!-- STEP 5: PRESENTATION ATTACK DETECTION -->
+          <article class="panel card-panel registration-step-page" id="panel-step-5" data-registration-step="5">
+            <div class="panel-header">
+              <div>
+                <span class="stage-tag">Step 5</span>
+                <h3>Presentation Attack Detection</h3>
+              </div>
+              <span class="status-tag status-waiting">Liveness Verified</span>
+            </div>
+            <div class="verification-card" id="card-pad">
+              <div class="vcard-header">
+                <span class="vcard-badge">Step 5</span>
+                <div>
+                  <strong>Anti-Spoofing (PAD Filter)</strong>
+                  <p>Checks for presentation attacks such as printed photos and screen replays. This project currently uses a demo PAD provider.</p>
+                </div>
+              </div>
+              <div class="vcard-body">
+                <div class="pad-checklist">
                   <div class="pad-item" id="pad-item-spoof">
                     <span class="pad-icon">🛡️</span>
                     <div>
-                      <strong>Anti-Spoofing (PAD Filter)</strong>
-                      <small id="pad-desc">Guards against screen replay & paper attacks</small>
+                      <strong>Presentation Attack Detection</strong>
+                      <small id="pad-desc">Guards against screen replay and paper attacks</small>
                     </div>
                     <span class="badge-mini" id="badge-pad">Pending</span>
                   </div>
                 </div>
-
-                <div class="action-buttons-row" style="margin-top: 1rem;">
-                  <button class="btn btn-secondary" id="btn-verify-liveness" disabled>Run Liveness Check</button>
-                  <button class="btn btn-secondary" id="btn-verify-pad" disabled>Run PAD Check</button>
-                </div>
-
+                <button class="btn btn-secondary" id="btn-verify-pad" disabled style="margin-top: 1rem;">Run PAD Check</button>
                 <button class="btn btn-primary" id="btn-complete-reg" disabled style="margin-top: 1rem;">
                   <span>Finalize Registration & Issue QR Pass</span>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
                 </button>
               </div>
             </div>
+            <div class="registration-step-navigation">
+              <button class="btn btn-secondary" type="button" data-registration-back="4">← Back to Liveness</button>
+            </div>
           </article>
 
-          <!-- QR PASS BADGE PANEL (STEP 5) -->
-          <article class="panel card-panel full-col" id="panel-qr-pass">
+          <!-- QR PASS BADGE PANEL (STEP 6) -->
+          <article class="panel card-panel full-col registration-step-page" id="panel-qr-pass" data-registration-step="6">
             <div class="panel-header">
               <div>
-                <span class="stage-tag">Step 5</span>
+                <span class="stage-tag">Step 6</span>
                 <h3>Official Participant Access Pass</h3>
               </div>
               <span class="status-tag status-idle" id="pass-status-tag">Not Generated</span>
@@ -332,6 +415,9 @@
                   </button>
                 </div>
               </div>
+            </div>
+            <div class="registration-step-navigation">
+              <button class="btn btn-secondary" type="button" data-registration-back="5">← Back to PAD Check</button>
             </div>
           </article>
         </div>
@@ -421,7 +507,7 @@
           <div class="flow-header">
             <span class="badge-accent">Relational Schema Inspector</span>
             <h2>System Database Tables</h2>
-            <p>Live synchronized view of all 4 normalized entities: <strong>Events</strong>, <strong>Participants</strong>, <strong>BiometricVerification</strong> (with Consent IDs), and <strong>Registrations</strong>.</p>
+            <p>Live synchronized view of the normalized event, participant, participant address, biometric verification, and registration tables.</p>
           </div>
           <div class="refresh-bar">
             <button class="btn btn-secondary" id="btn-refresh-db">
@@ -492,6 +578,40 @@
               </table>
             </div>
             <div class="table-pagination" data-pagination="participants">
+              <button class="btn btn-secondary btn-sm" type="button" data-page-action="previous" disabled>Previous</button>
+              <span data-page-label>Page 1 of 1</span>
+              <button class="btn btn-secondary btn-sm" type="button" data-page-action="next" disabled>Next</button>
+            </div>
+          </div>
+
+          <!-- PARTICIPANT ADDRESSES TABLE -->
+          <div class="table-card">
+            <div class="table-header">
+              <div>
+                <h3>Participant Addresses</h3>
+                <small>ParticipantId, Street, City, State/Province, Country, PostalCode</small>
+              </div>
+              <span class="badge-mini" id="count-addresses">0 addresses</span>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table" id="table-addresses">
+                <thead>
+                  <tr>
+                    <th>Participant ID</th>
+                    <th>Street Address</th>
+                    <th>City</th>
+                    <th>State / Province</th>
+                    <th>Country</th>
+                    <th>Postal / ZIP</th>
+                    <th>Created At</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td colspan="7" class="empty-cell">No participant addresses recorded yet.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-pagination" data-pagination="addresses">
               <button class="btn btn-secondary btn-sm" type="button" data-page-action="previous" disabled>Previous</button>
               <span data-page-label>Page 1 of 1</span>
               <button class="btn btn-secondary btn-sm" type="button" data-page-action="next" disabled>Next</button>
@@ -572,6 +692,6 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="/static/app.js?v=20261010-3"></script>
+    <script src="/static/app.js?v=20261010-4"></script>
   </body>
 </html>

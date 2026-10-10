@@ -24,6 +24,9 @@ dev = [
   "aiosqlite>=0.20,<1.0",
   "ruff>=0.6,<1.0",
 ]
+local-face = [
+  "opencv-contrib-python-headless>=4.10,<5.0",
+]
 
 [build-system]
 requires = ["hatchling>=1.25.0"]

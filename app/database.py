@@ -45,12 +45,20 @@ class Participant(Base):
     mobile: Mapped[str] = mapped_column(Text, nullable=False)
     participant_type: Mapped[str] = mapped_column(Text, default="Attendee", nullable=False)
     organization: Mapped[str] = mapped_column(Text, default="Individual", nullable=False)
+    face_template: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         nullable=False,
     )
 
+    address: Mapped[ParticipantAddress | None] = relationship(
+        "ParticipantAddress",
+        back_populates="participant",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        uselist=False,
+    )
     registrations: Mapped[list[Registration]] = relationship(
         "Registration",
         back_populates="participant",
@@ -62,6 +70,34 @@ class Participant(Base):
         back_populates="participant",
         cascade="all, delete-orphan",
         lazy="selectin",
+    )
+
+
+class ParticipantAddress(Base):
+    __tablename__ = "participant_addresses"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    participant_id: Mapped[str] = mapped_column(
+        ForeignKey("participants.participant_id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+    address_line1: Mapped[str] = mapped_column(Text, nullable=False)
+    address_line2: Mapped[str | None] = mapped_column(Text, nullable=True)
+    city: Mapped[str] = mapped_column(Text, nullable=False)
+    state_province: Mapped[str] = mapped_column(Text, nullable=False)
+    country: Mapped[str] = mapped_column(Text, nullable=False)
+    postal_code: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    participant: Mapped[Participant] = relationship(
+        "Participant",
+        back_populates="address",
     )
 
 

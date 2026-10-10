@@ -22,6 +22,7 @@ build/
 *.db
 *.sqlite
 *.sqlite3
+models/*.onnx
 
 # IDE and operating system
 .vscode/
