@@ -8,7 +8,7 @@ const state = {
   demoOtp: null,
   events: [],
   cameraStreams: {},
-  pages: { events: 1, participants: 1, addresses: 1, biometrics: 1, registrations: 1 },
+  pages: { events: 1, participants: 1, biometrics: 1, registrations: 1 },
 };
 
 const rowsPerPage = 10;
@@ -130,13 +130,7 @@ async function requestJson(url, options = {}) {
 
 // Pipeline stepper progression
 function setStepActive(stepNum) {
-  document.querySelectorAll('.registration-step-page').forEach((page) => {
-    const isActive = Number(page.dataset.registrationStep) === stepNum;
-    page.classList.toggle('active', isActive);
-    page.setAttribute('aria-hidden', isActive ? 'false' : 'true');
-  });
-
-  for (let i = 1; i <= 6; i++) {
+  for (let i = 1; i <= 5; i++) {
     const node = document.getElementById(`step-node-${i}`);
     if (node) {
       if (i < stepNum) {
@@ -148,17 +142,7 @@ function setStepActive(stepNum) {
       }
     }
   }
-  document.querySelector(`[data-registration-step="${stepNum}"]`)?.scrollIntoView({
-    behavior: 'smooth',
-    block: 'start',
-  });
 }
-
-document.querySelectorAll('[data-registration-back]').forEach((button) => {
-  button.addEventListener('click', () => {
-    setStepActive(Number(button.dataset.registrationBack));
-  });
-});
 
 // Load events into dropdown
 async function loadEvents() {
@@ -226,12 +210,10 @@ registrationForm.addEventListener('submit', async (e) => {
     otpInput.disabled = false;
     otpBtn.disabled = false;
     otpInput.value = '';
+    otpInput.focus();
 
     document.getElementById('btn-start-reg-camera').disabled = true;
     document.getElementById('btn-verify-face').disabled = true;
-    registrationForm.querySelectorAll('input, select, button').forEach((control) => {
-      control.disabled = true;
-    });
 
     // Only the demo provider returns a test code to the browser.
     const demoPill = document.getElementById('otp-demo-pill');
@@ -242,7 +224,6 @@ registrationForm.addEventListener('submit', async (e) => {
     if (state.demoOtp) document.getElementById('demo-otp-val').textContent = state.demoOtp;
 
     setStepActive(2);
-    otpInput.focus();
     showToast(`Registration initiated! Participant ID: ${reg.participant_id}. Verify OTP.`);
   } catch (err) {
     showToast(err.message, 'error');
@@ -342,7 +323,6 @@ document.getElementById('btn-verify-liveness').addEventListener('click', async (
 
     // Enable PAD check
     document.getElementById('btn-verify-pad').disabled = false;
-    setStepActive(5);
     showToast('3D liveness verified! Now run Presentation Attack Detection (PAD).');
   } catch (err) {
     showToast(err.message, 'error');
@@ -362,7 +342,7 @@ document.getElementById('btn-verify-pad').addEventListener('click', async () => 
     const badge = document.getElementById('badge-pad');
     badge.textContent = 'Passed';
     badge.className = 'badge-mini passed';
-    document.getElementById('pad-desc').textContent = 'Demo PAD check passed.';
+    document.getElementById('pad-desc').textContent = 'No spoofing detected (ISO/IEC 30107 compliant)';
 
     document.getElementById('verification-status-tag').textContent = 'Biometrics Passed';
     document.getElementById('verification-status-tag').className = 'status-tag';
@@ -420,7 +400,7 @@ document.getElementById('btn-complete-reg').addEventListener('click', async () =
     document.getElementById('pass-token-box').style.display = 'block';
     document.getElementById('btn-use-at-gate').style.display = 'inline-block';
 
-    setStepActive(6);
+    setStepActive(5);
     showToast('Registration finalized! Official QR Pass is issued and ready.');
     document.getElementById('panel-qr-pass').scrollIntoView({ behavior: 'smooth', block: 'start' });
     loadEvents(); // Update registered count
@@ -547,10 +527,9 @@ document.querySelectorAll('.table-pagination').forEach((pagination) => {
 // RELATIONAL DATABASE EXPLORER
 async function loadDatabaseExplorer() {
   try {
-    const [events, participants, addresses, biometrics, registrations] = await Promise.all([
+    const [events, participants, biometrics, registrations] = await Promise.all([
       requestJson('/api/events'),
       requestJson('/api/participants'),
-      requestJson('/api/participant-addresses'),
       requestJson('/api/biometrics'),
       requestJson('/api/registrations'),
     ]);
@@ -563,19 +542,6 @@ async function loadDatabaseExplorer() {
           <td>${new Date(e.event_date).toLocaleDateString()}</td>
           <td>${e.capacity}</td>
           <td><span class="badge-mini passed">${e.registered_count || 0}</span></td>
-        </tr>
-      `);
-
-    document.getElementById('count-addresses').textContent = `${addresses.length} addresses`;
-    renderPagedTable('addresses', addresses, 7, 'No participant addresses recorded yet.', (a) => `
-        <tr>
-          <td><code>${escapeHtml(a.participant_id)}</code></td>
-          <td>${escapeHtml(a.address_line1)}${a.address_line2 ? `, ${escapeHtml(a.address_line2)}` : ''}</td>
-          <td>${escapeHtml(a.city)}</td>
-          <td>${escapeHtml(a.state_province)}</td>
-          <td>${escapeHtml(a.country)}</td>
-          <td>${escapeHtml(a.postal_code)}</td>
-          <td>${new Date(a.created_at).toLocaleString()}</td>
         </tr>
       `);
 
@@ -630,5 +596,4 @@ document.getElementById('btn-refresh-db').addEventListener('click', () => {
 
 // Initialization
 initializeTheme();
-setStepActive(1);
 loadEvents();

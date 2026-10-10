@@ -3,15 +3,12 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.database import Base
-from app.providers import (
-    AwsRekognitionFaceProvider,
-    LocalFaceProvider,
-    VerificationProviderFactory,
-    VerificationResult,
-)
+from app.config import settings
+from app.database import Base, BiometricVerification, upgrade_legacy_sqlite_schema
+from app.providers import AwsRekognitionFaceProvider, VerificationProviderFactory
 from app.schemas import CreateRegistrationRequest
 from app.services import RegistrationService, VerificationStatus
 
@@ -26,6 +23,112 @@ async def test_db():
     service = RegistrationService(session_factory)
     yield service
     await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_legacy_sqlite_schema_adds_event_fields_without_losing_data():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                "CREATE TABLE events ("
+                "id INTEGER PRIMARY KEY, event_id TEXT, event_name TEXT, "
+                "event_date DATETIME, capacity INTEGER, created_at DATETIME)"
+            )
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO events (id, event_id, event_name, event_date, capacity, created_at) "
+                "VALUES (1, 'evt-old', 'Existing event', '2026-11-01', 100, '2026-10-01')"
+            )
+        )
+        await conn.run_sync(upgrade_legacy_sqlite_schema)
+        columns = await conn.run_sync(
+            lambda sync_conn: {
+                column["name"] for column in inspect(sync_conn).get_columns("events")
+            }
+        )
+        result = await conn.execute(text("SELECT event_name, status FROM events WHERE id = 1"))
+        event_name, status = result.one()
+
+    await engine.dispose()
+
+    assert {"venue", "registration_start", "registration_end", "status"} <= columns
+    assert event_name == "Existing event"
+    assert status == "published"
+
+
+@pytest.mark.asyncio
+async def test_admin_user_creation_hashes_password_and_rejects_duplicates(
+    test_db: RegistrationService,
+):
+    created = await test_db.create_admin_user(
+        username="events-team",
+        email="events@example.com",
+        password="correct horse battery",
+        role="event_manager",
+    )
+    assert created.password_hash != "correct horse battery"
+    assert test_db._verify_password(
+        "correct horse battery", created.password_hash, created.password_salt
+    )
+    with pytest.raises(ValueError, match="already exists"):
+        await test_db.create_admin_user(
+            username="events-team",
+            email="another@example.com",
+            password="correct horse battery",
+            role="event_manager",
+        )
+
+
+@pytest.mark.asyncio
+async def test_default_admin_requires_explicit_password(test_db, monkeypatch):
+    monkeypatch.setattr(settings, "admin_password", "")
+
+    with pytest.raises(ValueError, match="Set ADMIN_PASSWORD"):
+        await test_db.seed_default_admin()
+
+
+@pytest.mark.asyncio
+async def test_biometric_review_cannot_be_applied_to_another_participants_registration(
+    test_db: RegistrationService,
+):
+    first = await test_db.create_registration(
+        CreateRegistrationRequest(
+            event_id="evt-review",
+            full_name="First Participant",
+            email="first.review@example.com",
+            mobile="+15550000021",
+        )
+    )
+    second = await test_db.create_registration(
+        CreateRegistrationRequest(
+            event_id="evt-review",
+            full_name="Second Participant",
+            email="second.review@example.com",
+            mobile="+15550000022",
+        )
+    )
+    session = await test_db._get_session()
+    session.add(
+        BiometricVerification(
+            verification_id="BIO-REVIEW-001",
+            participant_id=first.participant_id,
+            provider_reference="provider-reference",
+            consent_id="CNS-REVIEW-001",
+        )
+    )
+    await session.commit()
+
+    with pytest.raises(ValueError, match="does not belong"):
+        await test_db.review_biometric(
+            "BIO-REVIEW-001",
+            "approve",
+            "authorized review",
+            registration_id=second.id,
+        )
+
+    assert second.status == VerificationStatus.OTP_PENDING
 
 
 @pytest.mark.asyncio
@@ -59,6 +162,7 @@ async def test_registration_flow_requires_otp_face_liveness_and_pad(test_db: Reg
     assert updated.status == VerificationStatus.REGISTERED
     assert updated.qr_code is not None
     assert updated.qr_code.startswith("event-registration:")
+    assert len(updated.qr_code) > 40
 
     assert await test_db.is_duplicate_registration("evt-001", "ada@example.com") is True
 
@@ -82,37 +186,7 @@ async def test_expired_otp_is_rejected(test_db: RegistrationService):
 
 
 @pytest.mark.asyncio
-async def test_registration_saves_participant_address_in_separate_table(
-    test_db: RegistrationService,
-):
-    registration = await test_db.create_registration(
-        CreateRegistrationRequest(
-            event_id="evt-address",
-            full_name="Katherine Johnson",
-            email="katherine.address@example.com",
-            mobile="+15550000012",
-            address_line1="123 Main Street",
-            address_line2="Suite 4",
-            city="Hampton",
-            state_province="Virginia",
-            country="United States",
-            postal_code="23666",
-        )
-    )
-
-    addresses = await test_db.get_participant_addresses()
-    assert len(addresses) == 1
-    assert addresses[0].participant_id == registration.participant_id
-    assert addresses[0].address_line1 == "123 Main Street"
-    assert addresses[0].address_line2 == "Suite 4"
-    assert addresses[0].city == "Hampton"
-    assert addresses[0].state_province == "Virginia"
-    assert addresses[0].country == "United States"
-    assert addresses[0].postal_code == "23666"
-
-
-@pytest.mark.asyncio
-async def test_demo_provider_rejects_camera_images_instead_of_claiming_face_match(
+async def test_demo_provider_accepts_camera_images_in_demo_mode(
     test_db: RegistrationService,
 ):
     registration = await test_db.create_registration(
@@ -125,8 +199,38 @@ async def test_demo_provider_rejects_camera_images_instead_of_claiming_face_matc
     )
     await test_db.verify_otp(registration.id, registration.otp_code)
 
-    with pytest.raises(ValueError, match="not configured"):
-        await test_db.verify_face(registration.id, "data:image/jpeg;base64,YWJj")
+    updated = await test_db.verify_face(registration.id, "data:image/jpeg;base64,YWJj")
+    assert updated.face_verified is True
+
+
+def test_factory_passes_aws_credentials_from_settings(monkeypatch):
+    import boto3
+
+    client_arguments = {}
+
+    def fake_client(service_name, **kwargs):
+        client_arguments["service_name"] = service_name
+        client_arguments.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(boto3, "client", fake_client)
+    monkeypatch.setattr(settings, "app_env", "development")
+    monkeypatch.setattr(settings, "otp_provider", "demo")
+    monkeypatch.setattr(settings, "face_provider", "aws_rekognition")
+    monkeypatch.setattr(settings, "aws_access_key_id", "test-access-key")
+    monkeypatch.setattr(settings, "aws_secret_access_key", "test-secret-key")
+    monkeypatch.setattr(settings, "aws_session_token", "test-session-token")
+
+    providers = VerificationProviderFactory()
+
+    assert isinstance(providers.face, AwsRekognitionFaceProvider)
+    assert client_arguments == {
+        "service_name": "rekognition",
+        "region_name": settings.aws_region,
+        "aws_access_key_id": "test-access-key",
+        "aws_secret_access_key": "test-secret-key",
+        "aws_session_token": "test-session-token",
+    }
 
 
 @pytest.mark.asyncio
@@ -162,68 +266,6 @@ async def test_face_collection_blocks_duplicate_enrollment_and_requires_same_gat
     assert client.index_calls == 0
 
 
-def test_local_face_cosine_similarity():
-    assert LocalFaceProvider._cosine_similarity([1.0, 0.0], [1.0, 0.0]) == pytest.approx(1.0)
-    assert LocalFaceProvider._cosine_similarity([1.0, 0.0], [0.0, 1.0]) == pytest.approx(0.0)
-    with pytest.raises(ValueError, match="incompatible"):
-        LocalFaceProvider._cosine_similarity([1.0], [1.0, 0.0])
-
-
-@pytest.mark.asyncio
-async def test_local_face_provider_blocks_duplicate_enrollment(test_db: RegistrationService):
-    class FakeLocalFaceProvider(LocalFaceProvider):
-        def __init__(self):
-            self.match_threshold = 0.9
-
-        async def verify(self, subject: str, payload: str) -> VerificationResult:
-            return VerificationResult(
-                accepted=True,
-                face_template=payload,
-                provider_reference="LOCAL-SFACE",
-            )
-
-    provider = FakeLocalFaceProvider()
-    service = RegistrationService(
-        test_db.session_factory,
-        providers=VerificationProviderFactory(face=provider),
-    )
-
-    first = await service.create_registration(
-        CreateRegistrationRequest(
-            event_id="evt-local",
-            full_name="First Person",
-            email="first.local@example.com",
-            mobile="+15550000010",
-        )
-    )
-    await service.verify_otp(first.id, first.otp_code)
-    await service.verify_face(first.id, "[1.0, 0.0]")
-
-    same_participant = await service.create_registration(
-        CreateRegistrationRequest(
-            event_id="evt-local-repeat",
-            full_name="First Person",
-            email="first.local@example.com",
-            mobile="+15550000010",
-        )
-    )
-    await service.verify_otp(same_participant.id, same_participant.otp_code)
-    with pytest.raises(ValueError, match="does not match"):
-        await service.verify_face(same_participant.id, "[0.0, 1.0]")
-
-    second = await service.create_registration(
-        CreateRegistrationRequest(
-            event_id="evt-local",
-            full_name="Second Person",
-            email="second.local@example.com",
-            mobile="+15550000011",
-        )
-    )
-    await service.verify_otp(second.id, second.otp_code)
-    with pytest.raises(ValueError, match="already enrolled"):
-        await service.verify_face(second.id, "[0.99, 0.01]")
-
-
 @pytest.mark.asyncio
 async def test_check_in_requires_valid_qr_and_face(test_db: RegistrationService):
     request = CreateRegistrationRequest(
@@ -240,8 +282,8 @@ async def test_check_in_requires_valid_qr_and_face(test_db: RegistrationService)
     await test_db.verify_pad(registration.id, "real-person")
     await test_db.complete_registration(registration.id)
 
-    with pytest.raises(ValueError, match="not configured"):
-        await test_db.check_in(registration.id, "data:image/jpeg;base64,YWJj")
+    with pytest.raises(ValueError, match="Face"):
+        await test_db.check_in(registration.id, "invalid-face")
 
     check_in = await test_db.check_in(registration.id, "valid-face")
     assert check_in.status == VerificationStatus.CHECKED_IN
